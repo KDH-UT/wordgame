@@ -106,10 +106,10 @@
         <button id="toggle-switch-btn" class="btn-toggle" onclick="toggleAllowTeamSwitch()">조 변경 허용: OFF</button>
       </div>
 
-      <!-- 컴퓨터 마스터 접속 시에만 보이는 전용 공개 버튼 영역 -->
+      <!-- 컴퓨터 마스터 접속 시에만 보이는 전용 안내 영역 -->
       <div id="master-reveal-control" style="margin: 15px 0; padding: 12px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeeba;" class="hidden">
-        <p style="font-weight: bold; color: #856404; margin-bottom: 8px;">💻 컴퓨터 마스터 전용 제어</p>
-        <button class="btn-action" style="background-color: #8e44ad;" onclick="revealHintsToGuessers()">라운드 힌트/정답 화면 공개</button>
+        <p style="font-weight: bold; color: #856404; margin-bottom: 8px;">💻 컴퓨터 마스터 조회 모드</p>
+        <p style="font-size: 14px; color: #666;">진짜 호스트(스마트폰)가 화면을 공개할 때까지 대기 중입니다[cite: 1].</p>
       </div>
 
       <h3>🏆 조별 누적 점수판</h3>
@@ -138,6 +138,12 @@
 
         <button class="btn-action" onclick="startRound()">1. 라운드 시작 (역할 자동배정)[cite: 1]</button>
         <button class="btn-action" style="background-color: #27ae60;" onclick="revealHintsToGuessers()">2. 조별 힌트 및 정답 현황 공개 (타이머 시작!)[cite: 1]</button>
+        
+        <!-- 👈 진짜 호스트 화면에 추가된 컴퓨터 마스터 화면 공개 전용 버튼 -->
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #bce8f1;">
+          <button class="btn-action" style="background-color: #8e44ad;" onclick="revealMasterHints()">💻 컴퓨터 마스터 화면에 힌트/정답 공개하기</button>
+        </div>
+
         <div id="current-word-display" class="word-display"></div>
       </div>
 
@@ -259,7 +265,6 @@
       socket.emit('createRoom', { teamsCount: count });
     }
 
-    // 조 변경 토글 버튼 UI 동기화 함수
     function updateToggleBtnUI() {
       const btn = document.getElementById('toggle-switch-btn');
       if (!btn || !gameState) return;
@@ -376,6 +381,12 @@
     function revealHintsToGuessers() {
       socket.emit('revealHints', { roomId: currentRoomId });
       alert("각 조별로 힌트와 정답 입력 화면이 공개되고 타이머가 시작되었습니다![cite: 1]");
+    }
+
+    // 👈 진짜 호스트가 컴퓨터 마스터 화면 공개 버튼을 눌렀을 때 실행
+    function revealMasterHints() {
+      socket.emit('revealMasterHints', { roomId: currentRoomId });
+      alert("컴퓨터 마스터 화면에 힌트 및 정답 현황이 공개되었습니다 (스파이 이동 완료).");
     }
 
     function selectTeam(teamNum, btnElement) {
@@ -623,11 +634,11 @@
         const teamTotal = gameState.teamScores[i] || 0;
         let html = `<div class="team-card"><h4><span>${i}조 (${members.length}명)</span><small style="color:#2ECC71;">총 ${teamTotal}점</small></h4>`;
         
-        // 컴퓨터 마스터 화면이고, 아직 힌트/정답이 공개되지 않은 상태라면 내용을 숨김
-        const hideDetailsForMaster = isMaster && !gameState.isHintsRevealed;
+        // 👈 컴퓨터 마스터 화면이고, 진짜 호스트가 아직 마스터 공개 버튼을 누르지 않았다면 숨김
+        const hideDetailsForMaster = isMaster && !gameState.isMasterHintsRevealed;
 
         if (hideDetailsForMaster) {
-          html += `<div style="padding: 10px; color: #7f8c8d; font-style: italic; text-align: center;">라운드 진행 중 (공개 대기 중)[cite: 1]</div>`;
+          html += `<div style="padding: 10px; color: #7f8c8d; font-style: italic; text-align: center;">라운드 진행 중 (호스트 공개 대기 중)[cite: 1]</div>`;
         } else {
           members.forEach(id => {
             const p = gameState.players[id];
