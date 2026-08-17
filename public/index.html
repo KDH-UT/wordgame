@@ -255,17 +255,20 @@
 
     // 조 변경 토글 버튼 UI 동기화 함수 추가
     function updateToggleBtnUI() {
-      const btn = document.getElementById('toggle-switch-btn');
-      if (!btn || !gameState) return;
-      
-      if (gameState.allowSwitch) {
-        btn.innerText = "조 변경 허용: ON";
-        btn.classList.add('active');
-      } else {
-        btn.innerText = "조 변경 허용: OFF";
-        btn.classList.remove('active');
-      }
-    }
+  const btn = document.getElementById('toggle-switch-btn');
+  if (!btn || !gameState) return;
+  
+  // 서버의 변수명인 allowTeamSwitch 또는 allowSwitch 모두 대응
+  const isAllowed = gameState.allowTeamSwitch !== undefined ? gameState.allowTeamSwitch : gameState.allowSwitch;
+  
+  if (isAllowed) {
+    btn.innerText = "조 변경 허용: ON";
+    btn.classList.add('active'); // 초록색 활성화 클래스
+  } else {
+    btn.innerText = "조 변경 허용: OFF";
+    btn.classList.remove('active'); // 비활성화 클래스 제거
+  }
+}
 
     socket.on('roomCreated', (data) => {
       currentRoomId = data.roomId;
