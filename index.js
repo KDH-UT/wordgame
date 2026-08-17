@@ -24,7 +24,8 @@ io.on('connection', (socket) => {
             currentWord: '',
             currentImage: '',
             allowTeamSwitch: false,
-            isHintsRevealed: false, // 👈 컴퓨터 마스터 화면 힌트/정답 공개 여부 상태 추가
+            isHintsRevealed: false,
+            isMasterHintsRevealed: false, // 👈 컴퓨터 마스터 전용 공개 여부 상태 추가
             hostSocketId: socket.id,
             masters: {}
         };
@@ -97,7 +98,8 @@ io.on('connection', (socket) => {
         room.currentImage = qData.image;
         room.roundStartTime = Date.now();
         room.startTime = null;
-        room.isHintsRevealed = false; // 👈 라운드 시작 시 마스터 화면 내용 숨김 상태로 초기화
+        room.isHintsRevealed = false;
+        room.isMasterHintsRevealed = false; // 👈 라운드 시작 시 컴퓨터 마스터 공개 상태도 초기화
 
         for (let t = 1; t <= room.teamsCount; t++) {
             const members = room.teams[t];
@@ -182,7 +184,7 @@ io.on('connection', (socket) => {
         if (!room) return;
         const now = Date.now();
         room.startTime = now;
-        room.isHintsRevealed = true; // 👈 마스터 화면에도 공개 상태로 전환
+        room.isHintsRevealed = true; 
 
         Object.keys(room.players).forEach(id => {
             const p = room.players[id];
@@ -207,6 +209,31 @@ io.on('connection', (socket) => {
             hintsList.sort(() => Math.random() - 0.5);
             io.to(guesserId).emit('hintsRevealed', { hints: hintsList, startTime: now });
         }
+        io.to(roomId).emit('syncState', { gameState: room });
+    });
+
+    // 👈 진짜 호스트가 누를 때 컴퓨터 마스터 화면에 정보 공개 및 스파이 시각적 조 이동 처리
+    socket.on('revealMasterHints', ({ roomId }) => {
+        const room = rooms[roomId];
+        if (!room) return;
+        room.isMasterHintsRevealed = true;
+
+        // 스파이들을 실제로 타겟 조로 임시 이동시켜서 컴퓨터 마스터 화면에 반영
+        Object.keys(room.players).forEach(id => {
+            const p = room.players[id];
+            if (p && p.isSpy && p.targetTeamForSpy) {
+                // 원래 조 배열에서 제거
+                for (let i = 1; i <= room.teamsCount; i++) {
+                    const idx = room.teams[i].indexOf(id);
+                    if (idx !== -1) room.teams[i].splice(idx, 1);
+                }
+                // 타겟 조 배열에 추가
+                p.team = Number(p.targetTeamForSpy);
+                if (!room.teams[p.team]) room.teams[p.team] = [];
+                room.teams[p.team].push(id);
+            }
+        });
+
         io.to(roomId).emit('syncState', { gameState: room });
     });
 
