@@ -393,26 +393,39 @@
       document.getElementById('role-badge').innerText = "호스트가 라운드를 시작하길 기다리는 중...";
     });
 
+    // 참가자 화면의 라운드 시작 이벤트 처리 부분 수정
     socket.on('roundStart', (data) => {
       isTimerStarted = false;
       stopLiveScoreTimer();
+      
+      // 1. 기존 화면 요소들을 모두 숨기고 초기화
       document.getElementById('ui-giver').classList.add('hidden');
       document.getElementById('ui-guesser').classList.add('hidden');
       document.getElementById('live-score-box').classList.add('hidden');
+      
+      // 2. 입력창 및 결과 메시지 초기화
       document.getElementById('hint-input').value = '';
       document.getElementById('answer-input').value = '';
       document.getElementById('hint-msg').innerText = '';
       document.getElementById('result-score-txt').innerText = '';
+      
+      // 3. 힌트 목록 초기화 (이 부분이 중요합니다)
+      document.getElementById('hints-list').innerHTML = '';
+      
+      // 4. 버튼 상태 초기화
       document.getElementById('hint-btn').disabled = false;
       document.getElementById('ans-btn').disabled = true;
-
+    
+      // 스파이 여부 표시
       if (data.isSpy) document.getElementById('spy-alert-box').classList.remove('hidden');
       else document.getElementById('spy-alert-box').classList.add('hidden');
-
+    
+      // 새로운 라운드 UI 표시
       if (data.isGuesser) {
         document.getElementById('role-badge').innerText = "🎯 당신은 문제를 맞추는 사람입니다!";
         document.getElementById('ui-guesser').classList.remove('hidden');
-        document.getElementById('hints-list').innerHTML = '<i>호스트가 조별 힌트를 공개하길 기다리는 중...</i>';
+        // 처음 시작할 때는 빈 상태로 둠
+        document.getElementById('hints-list').innerHTML = '<i>힌트가 공개되기를 기다리는 중...</i>';
       } else {
         document.getElementById('role-badge').innerText = "💡 힌트를 작성해 주세요!";
         document.getElementById('given-word').innerText = data.word;
