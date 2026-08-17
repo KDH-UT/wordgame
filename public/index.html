@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>단어 힌트 게임</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; text-align: center; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div id="view-select" class="card">
+        <h1>단어 힌트 게임</h1>
+        <button onclick="createRoom()">방 생성</button>
+        <input type="text" id="roomIdInput" placeholder="방 코드">
+        <button onclick="joinRoom()">참가</button>
+    </div>
+    <script>
+        const socket = io();
+        function createRoom() { socket.emit('createRoom'); }
+        socket.on('roomCreated', (id) => alert('방 생성됨: ' + id));
+        function joinRoom() { 
+            const roomId = document.getElementById('roomIdInput').value;
+            socket.emit('joinRoom', { roomId, name: 'Player' }); 
+        }
+        socket.on('joined', (data) => alert('입장 완료: ' + data.roomId));
+    </script>
+</body>
+</html>
