@@ -193,13 +193,21 @@ io.on('connection', (socket) => {
             if (!guesserId) continue;
 
             const hintsList = [];
+            
+            // 1. 해당 조 소속 일반 팀원들의 승인된 힌트 수집
             members.forEach(id => {
                 const p = room.players[id];
-                if (!p.isGuesser && !p.isSpy && p.hint && p.isApproved) hintsList.push(p.hint);
+                if (!p.isGuesser && !p.isSpy && p.hint && p.isApproved) {
+                    hintsList.push(p.hint);
+                }
             });
+
+            // 2. 다른 조에서 이 조(targetTeam)로 침투한 스파이의 승인된 힌트 수집
             Object.keys(room.players).forEach(id => {
                 const p = room.players[id];
-                if (p.isSpy && p.targetTeamForSpy === targetTeam && p.hint && p.isApproved) hintsList.push(p.hint);
+                if (p.isSpy && p.targetTeamForSpy === targetTeam && p.hint && p.isApproved) {
+                    hintsList.push(p.hint);
+                }
             });
 
             hintsList.sort(() => Math.random() - 0.5);
