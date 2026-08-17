@@ -205,12 +205,13 @@ io.on('connection', (socket) => {
             // 2. 다른 조에서 이 조(targetTeam)로 침투한 스파이의 승인된 힌트 수집
             Object.keys(room.players).forEach(id => {
                 const p = room.players[id];
-                if (p.isSpy && p.targetTeamForSpy === targetTeam && p.hint && p.isApproved) {
+                if (p.isSpy && Number(p.targetTeamForSpy) === Number(targetTeam) && p.hint && p.isApproved) {
                     hintsList.push(p.hint);
                 }
             });
 
             hintsList.sort(() => Math.random() - 0.5);
+            // 💡 키 이름을 'hints'로 확실하게 전송
             io.to(guesserId).emit('hintsRevealed', { hints: hintsList, startTime: now });
         }
         io.to(roomId).emit('syncState', { gameState: room });
