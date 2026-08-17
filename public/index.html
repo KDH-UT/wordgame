@@ -106,10 +106,16 @@
         <button id="toggle-switch-btn" class="btn-toggle" onclick="toggleAllowTeamSwitch()">조 변경 허용: OFF</button>
       </div>
 
+      <!-- 컴퓨터 마스터 접속 시에만 보이는 전용 공개 버튼 영역 -->
+      <div id="master-reveal-control" style="margin: 15px 0; padding: 12px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeeba;" class="hidden">
+        <p style="font-weight: bold; color: #856404; margin-bottom: 8px;">💻 컴퓨터 마스터 전용 제어</p>
+        <button class="btn-action" style="background-color: #8e44ad;" onclick="revealHintsToGuessers()">라운드 힌트/정답 화면 공개</button>
+      </div>
+
       <h3>🏆 조별 누적 점수판</h3>
       <div id="leaderboard" class="leaderboard"></div>
 
-      <!-- 컴퓨터 마스터 접속 시 불필요한 제어 영역(문제 선택, 시작 버튼 등)은 숨김 -->
+      <!-- 스마트폰 방장 화면에만 보이는 문제 선택 및 시작 제어판 -->
       <div id="host-control-panel" style="margin: 20px 0; padding: 15px; background: #eef6ff; border-radius: 8px;">
         <label class="option-box">
           <input type="checkbox" id="enable-spy-opt" checked>
@@ -253,22 +259,21 @@
       socket.emit('createRoom', { teamsCount: count });
     }
 
-    // 조 변경 토글 버튼 UI 동기화 함수 추가
+    // 조 변경 토글 버튼 UI 동기화 함수
     function updateToggleBtnUI() {
-  const btn = document.getElementById('toggle-switch-btn');
-  if (!btn || !gameState) return;
-  
-  // 서버의 변수명인 allowTeamSwitch 또는 allowSwitch 모두 대응
-  const isAllowed = gameState.allowTeamSwitch !== undefined ? gameState.allowTeamSwitch : gameState.allowSwitch;
-  
-  if (isAllowed) {
-    btn.innerText = "조 변경 허용: ON";
-    btn.classList.add('active'); // 초록색 활성화 클래스
-  } else {
-    btn.innerText = "조 변경 허용: OFF";
-    btn.classList.remove('active'); // 비활성화 클래스 제거
-  }
-}
+      const btn = document.getElementById('toggle-switch-btn');
+      if (!btn || !gameState) return;
+      
+      const isAllowed = gameState.allowTeamSwitch !== undefined ? gameState.allowTeamSwitch : gameState.allowSwitch;
+      
+      if (isAllowed) {
+        btn.innerText = "조 변경 허용: ON";
+        btn.classList.add('active');
+      } else {
+        btn.innerText = "조 변경 허용: OFF";
+        btn.classList.remove('active');
+      }
+    }
 
     socket.on('roomCreated', (data) => {
       currentRoomId = data.roomId;
@@ -329,6 +334,7 @@
       document.getElementById('room-code-txt').innerText = `[컴퓨터 마스터 조회 모드] 방 코드: ${currentRoomId}[cite: 1]`;
       
       document.getElementById('host-control-panel').classList.add('hidden');
+      document.getElementById('master-reveal-control').classList.remove('hidden');
       
       renderLeaderboard();
       renderHostGrid();
@@ -395,7 +401,8 @@
     socket.on('errorMsg', (msg) => { alert(msg); });
 
     socket.on('roomInfo', (data) => {
-      if (data.isChanging && !data.allowSwitch) {
+      const isAllowed = data.allowSwitch !== undefined ? data.allowSwitch : data.allowTeamSwitch;
+      if (data.isChanging && !isAllowed) {
         return alert("현재 호스트가 조 변경을 허용하지 않았습니다!");
       }
     
@@ -452,8 +459,10 @@
       document.getElementById('ui-guesser').classList.remove('hidden');
       
       const list = document.getElementById('hints-list');
-      const myTeamHints = data.teamHints || [];
-      list.innerHTML = myTeamHints.map(h => `<div style="padding: 6px; margin: 5px 0; background: #fff; border: 1px solid #ddd; border-radius: 6px; font-weight:bold; color:#2980b9;">• ${h}</div>`).join('') || '<i>제출된 힌트가 없습니다[cite: 1].</i>';
+      const hintsArray = data.hints || [];
+      list.innerHTML = hintsArray.length > 0 
+          ? hintsArray.map(h => `<div style="padding: 6px; margin: 5px 0; background: #fff; border: 1px solid #ddd; border-radius: 6px; font-weight:bold; color:#2980b9;">• ${h}</div>`).join('') 
+          : '<i>제출된 힌트가 없습니다[cite: 1].</i>';
       
       document.getElementById('ans-btn').disabled = false;
       startLiveScoreTimer();
@@ -614,51 +623,55 @@
         const teamTotal = gameState.teamScores[i] || 0;
         let html = `<div class="team-card"><h4><span>${i}조 (${members.length}명)</span><small style="color:#2ECC71;">총 ${teamTotal}점</small></h4>`;
         
-        members.forEach(id => {
-          const p = gameState.players[id];
-          if (p) {
-            const role = p.isGuesser ? ' <span class="guesser">[*]</span>' : '';
-            const spyBadge = p.isSpy ? ` <span class="spy-badge">스파이🕵️</span>` : '';
-            const spyClass = p.isSpy ? ' spy-highlight' : '';
-            const timeTxt = p.hintDuration ? `<span class="time-badge">(${p.hintDuration}초)</span>` : '';
-            
-            let hintTxt = '';
-            if (p.hint) {
-              const statusClass = p.isApproved ? 'hint-badge approved' : 'hint-badge';
-              const statusLabel = p.isApproved ? '[승인됨]' : '[대기중]';
+        // 컴퓨터 마스터 화면이고, 아직 힌트/정답이 공개되지 않은 상태라면 내용을 숨김
+        const hideDetailsForMaster = isMaster && !gameState.isHintsRevealed;
+
+        if (hideDetailsForMaster) {
+          html += `<div style="padding: 10px; color: #7f8c8d; font-style: italic; text-align: center;">라운드 진행 중 (공개 대기 중)[cite: 1]</div>`;
+        } else {
+          members.forEach(id => {
+            const p = gameState.players[id];
+            if (p) {
+              const role = p.isGuesser ? ' <span class="guesser">[*]</span>' : '';
+              const spyBadge = p.isSpy ? ` <span class="spy-badge">스파이🕵️</span>` : '';
+              const spyClass = p.isSpy ? ' spy-highlight' : '';
+              const timeTxt = p.hintDuration ? `<span class="time-badge">(${p.hintDuration}초)</span>` : '';
               
-              let actionBtns = '';
-              // 💻 컴퓨터 마스터(isMaster)가 아닐 때만 승인/반려 버튼 생성
-              if (!isMaster) {
-                if (!p.isApproved) actionBtns = `<button class="btn-approve" onclick="approveHint('${id}')">승인</button>`;
-                actionBtns += `<button class="btn-danger" onclick="rejectHint('${id}')">반려</button>`;
+              let hintTxt = '';
+              if (p.hint) {
+                const statusClass = p.isApproved ? 'hint-badge approved' : 'hint-badge';
+                const statusLabel = p.isApproved ? '[승인됨]' : '[대기중]';
+                
+                let actionBtns = '';
+                if (!isMaster) {
+                  if (!p.isApproved) actionBtns = `<button class="btn-approve" onclick="approveHint('${id}')">승인</button>`;
+                  actionBtns += `<button class="btn-danger" onclick="rejectHint('${id}')">반려</button>`;
+                }
+                hintTxt = `<br><span class="${statusClass}">${statusLabel} ${p.hint}</span> ${actionBtns}`;
               }
               
-              hintTxt = `<br><span class="${statusClass}">${statusLabel} ${p.hint}</span> ${actionBtns}`;
-            }
-            
-            let ansTxt = '';
-            if (p.answer) {
-              let ansActionBtns = '';
-              // 💻 컴퓨터 마스터(isMaster)가 아닐 때만 정답/오답 처리 버튼 생성
-              if (!isMaster) {
+              let ansTxt = '';
+              if (p.answer) {
+                let ansActionBtns = '';
+                if (!isMaster) {
+                  if (p.isCorrect) {
+                    ansActionBtns = ` <button class="btn-danger" onclick="rejectAnswer('${id}')">오답 처리</button>`;
+                  } else {
+                    ansActionBtns = ` <button class="btn-approve" onclick="approveAnswer('${id}')">정답 처리</button> <button class="btn-danger" onclick="rejectAnswer('${id}')">오답 처리</button>`;
+                  }
+                }
+
                 if (p.isCorrect) {
-                  ansActionBtns = ` <button class="btn-danger" onclick="rejectAnswer('${id}')">오답 처리</button>`;
+                  ansTxt = `<br><small style="color:#27ae60; font-weight:bold;">정답 승인됨: ${p.answer} (+${p.pendingScore}점)</small>${ansActionBtns}`;
                 } else {
-                  ansActionBtns = ` <button class="btn-approve" onclick="approveAnswer('${id}')">정답 처리</button> <button class="btn-danger" onclick="rejectAnswer('${id}')">오답 처리</button>`;
+                  ansTxt = `<br><small style="color:#e67e22; font-weight:bold;">제출 정답: ${p.answer} (대기점수: ${p.pendingScore}점)</small>${ansActionBtns}`;
                 }
               }
-
-              if (p.isCorrect) {
-                ansTxt = `<br><small style="color:#27ae60; font-weight:bold;">정답 승인됨: ${p.answer} (+${p.pendingScore}점)</small>${ansActionBtns}`;
-              } else {
-                ansTxt = `<br><small style="color:#e67e22; font-weight:bold;">제출 정답: ${p.answer} (대기점수: ${p.pendingScore}점)</small>${ansActionBtns}`;
-              }
+              
+              html += `<div class="player-item${spyClass}">• ${p.name}${timeTxt}${role}${spyBadge}${hintTxt}${ansTxt}</div>`;
             }
-            
-            html += `<div class="player-item${spyClass}">• ${p.name}${timeTxt}${role}${spyBadge}${hintTxt}${ansTxt}</div>`;
-          }
-        });
+          });
+        }
         html += `</div>`;
         grid.innerHTML += html;
       }
