@@ -130,7 +130,7 @@
         <div id="selected-question-preview" style="margin: 10px 0; font-weight: bold; color: #e67e22;">선택된 문제 없음</div>
 
         <button class="btn-action" onclick="startRound()">1. 라운드 시작 (역할 자동배정)</button>
-        <button class="btn-action" style="background-color: #27ae60;" onclick="revealHintsToGuessers()">2. 힌트 일괄 승인 및 공개 (타이머 시작!)</button>
+        <button class="btn-action" style="background-color: #27ae60;" onclick="revealHintsToGuessers()">2. 조별 힌트 및 정답 현황 공개 (타이머 시작!)</button>
         <div id="current-word-display" class="word-display"></div>
       </div>
 
@@ -177,7 +177,7 @@
 
       <div id="spy-alert-box" class="spy-alert-box hidden" style="background:#8e44ad; color:white; padding:12px; border-radius:8px; font-weight:bold; margin:10px 0;">
         🕵️ 당신은 이번 라운드 스파이입니다!<br>
-        <span style="font-size:13px; font-weight:normal;">당신이 작성한 힌트는 <b>다른 조</b>의 출제자에게 전송됩니다.</span>
+        <span style="font-size:13px; font-weight:normal;">당신이 작성한 힌트는 <b>실제로 힌트를 입력한 조(당신이 속한 조)</b>의 출제자/참가자 화면에 반영되며, 정답 맞추기 화면에 제공됩니다.</span>
       </div>
 
       <h2 id="role-badge" style="margin: 15px 0;"></h2>
@@ -196,7 +196,7 @@
         <div id="live-score-box" class="live-score-box hidden">
           현재 제출 시 획득 점수: <br><span id="live-score-val">1000</span> 점
         </div>
-        <p style="margin-top: 10px;">호스트가 공개한 힌트 목록 (익명):</p>
+        <p style="margin-top: 10px;">우리 조에 도착한 힌트 목록 (스파이 힌트 포함):</p>
         <div id="hints-list" style="background: #f8f9fa; padding: 10px; border-radius: 8px; margin: 10px 0; min-height: 50px;"></div>
         <input type="text" id="answer-input" placeholder="정답 입력"><br>
         <button id="ans-btn" onclick="sendAnswer()" style="background-color: #e67e22;" disabled>정답 제출</button>
@@ -216,7 +216,7 @@
       4: { label: "4번", word: "주석", image: "images/q4.png" },
       5: { label: "5번", word: "산란", image: "images/q5.png" },
       6: { label: "6번", word: "배", image: "images/q6.png" },
-      6: { label: "7번", word: "핵", image: "images/q7.png" }
+      7: { label: "7번", word: "핵", image: "images/q7.png" }
     };
 
     let selectedQuestionKey = null;
@@ -247,7 +247,6 @@
       document.getElementById('view-player').classList.remove('hidden');
     }
 
-    // --- 1. 스마트폰에서 방 생성 ---
     function createRoomAsPhone() {
       isPhoneHost = true;
       const count = parseInt(document.getElementById('teams-count').value);
@@ -292,7 +291,6 @@
       socket.emit('kickMaster', { roomId: currentRoomId, masterId });
     }
 
-    // --- 2. 컴퓨터에서 마스터 권한으로 접속 ---
     function connectAsMaster() {
       const code = document.getElementById('master-room-code').value.trim().toUpperCase();
       if (!code) return alert("방 코드를 입력하세요.");
@@ -323,7 +321,7 @@
 
     function selectQuestion(qKey) {
       selectedQuestionKey = qKey;
-      ['example', 1, 2, 3, 4, 5].forEach(key => {
+      ['example', 1, 2, 3, 4, 5, 6, 7].forEach(key => {
         const btn = document.getElementById(`q-btn-${key}`);
         if(btn) {
           if (key === qKey) btn.classList.add('selected');
@@ -348,7 +346,7 @@
 
     function revealHintsToGuessers() {
       socket.emit('revealHints', { roomId: currentRoomId });
-      alert("모든 익명 힌트가 공개되고 타이머가 시작되었습니다!");
+      alert("각 조별로 힌트와 정답 입력 화면이 공개되고 타이머가 시작되었습니다!");
     }
 
     function selectTeam(teamNum, btnElement) {
@@ -374,7 +372,6 @@
     socket.on('errorMsg', (msg) => { alert(msg); });
 
     socket.on('roomInfo', (data) => {
-      // 👇 조 변경을 요청한 경우인데, 허용 상태가 OFF(false)라면 차단
       if (data.isChanging && !data.allowSwitch) {
         return alert("현재 호스트가 조 변경을 허용하지 않았습니다!");
       }
@@ -415,7 +412,7 @@
       if (data.isGuesser) {
         document.getElementById('role-badge').innerText = "🎯 당신은 문제를 맞추는 사람입니다!";
         document.getElementById('ui-guesser').classList.remove('hidden');
-        document.getElementById('hints-list').innerHTML = '<i>호스트가 익명 힌트를 일괄 공개하길 기다리는 중...</i>';
+        document.getElementById('hints-list').innerHTML = '<i>호스트가 조별 힌트를 공개하길 기다리는 중...</i>';
       } else {
         document.getElementById('role-badge').innerText = "💡 힌트를 작성해 주세요!";
         document.getElementById('given-word').innerText = data.word;
@@ -426,11 +423,13 @@
       }
     });
 
+    // 👇 각 조별로 수신된 힌트 목록(스파이 교란 반영)을 출력하도록 수정
     socket.on('hintsRevealed', (data) => {
       isTimerStarted = true;
       timerStartTime = data.startTime || Date.now();
       const list = document.getElementById('hints-list');
-      list.innerHTML = data.hints.map(h => `<div style="padding: 4px 8px; margin: 3px 0; background: #fff; border: 1px solid #ddd; border-radius: 4px; font-weight:bold; color:#2980b9;">• ${h}</div>`).join('') || '<i>제출된 힌트가 없습니다.</i>';
+      const myTeamHints = data.teamHints || [];
+      list.innerHTML = myTeamHints.map(h => `<div style="padding: 4px 8px; margin: 3px 0; background: #fff; border: 1px solid #ddd; border-radius: 4px; font-weight:bold; color:#2980b9;">• ${h}</div>`).join('') || '<i>우리 조에 제출된 승인된 힌트가 없습니다.</i>';
       document.getElementById('ans-btn').disabled = false;
       startLiveScoreTimer();
     });
@@ -461,6 +460,7 @@
     });
 
     socket.on('answerRejected', () => {
+      stopLiveScoreTimer();
       document.getElementById('result-score-txt').style.color = '#d9534f';
       document.getElementById('result-score-txt').innerText = "⚠️ 오답 처리되었습니다.";
       if (isTimerStarted) { document.getElementById('ans-btn').disabled = false; startLiveScoreTimer(); }
