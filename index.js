@@ -24,6 +24,7 @@ io.on('connection', (socket) => {
             currentWord: '',
             currentImage: '',
             allowTeamSwitch: false,
+            isHintsRevealed: false, // 👈 컴퓨터 마스터 화면 힌트/정답 공개 여부 상태 추가
             hostSocketId: socket.id,
             masters: {}
         };
@@ -68,7 +69,6 @@ io.on('connection', (socket) => {
     socket.on('joinTeam', ({ roomId, team, name }) => {
         const room = rooms[roomId];
         if (!room) return;
-        // Remove from other teams
         for (let i=1; i<=room.teamsCount; i++) {
             const idx = room.teams[i].indexOf(socket.id);
             if (idx !== -1) room.teams[i].splice(idx, 1);
@@ -97,6 +97,7 @@ io.on('connection', (socket) => {
         room.currentImage = qData.image;
         room.roundStartTime = Date.now();
         room.startTime = null;
+        room.isHintsRevealed = false; // 👈 라운드 시작 시 마스터 화면 내용 숨김 상태로 초기화
 
         for (let t = 1; t <= room.teamsCount; t++) {
             const members = room.teams[t];
@@ -181,6 +182,7 @@ io.on('connection', (socket) => {
         if (!room) return;
         const now = Date.now();
         room.startTime = now;
+        room.isHintsRevealed = true; // 👈 마스터 화면에도 공개 상태로 전환
 
         Object.keys(room.players).forEach(id => {
             const p = room.players[id];
@@ -193,25 +195,16 @@ io.on('connection', (socket) => {
             if (!guesserId) continue;
 
             const hintsList = [];
-            
-            // 1. 해당 조 소속 일반 팀원들의 승인된 힌트 수집
             members.forEach(id => {
                 const p = room.players[id];
-                if (!p.isGuesser && !p.isSpy && p.hint && p.isApproved) {
-                    hintsList.push(p.hint);
-                }
+                if (!p.isGuesser && !p.isSpy && p.hint && p.isApproved) hintsList.push(p.hint);
             });
-
-            // 2. 다른 조에서 이 조(targetTeam)로 침투한 스파이의 승인된 힌트 수집
             Object.keys(room.players).forEach(id => {
                 const p = room.players[id];
-                if (p.isSpy && Number(p.targetTeamForSpy) === Number(targetTeam) && p.hint && p.isApproved) {
-                    hintsList.push(p.hint);
-                }
+                if (p.isSpy && Number(p.targetTeamForSpy) === Number(targetTeam) && p.hint && p.isApproved) hintsList.push(p.hint);
             });
 
             hintsList.sort(() => Math.random() - 0.5);
-            // 💡 키 이름을 'hints'로 확실하게 전송
             io.to(guesserId).emit('hintsRevealed', { hints: hintsList, startTime: now });
         }
         io.to(roomId).emit('syncState', { gameState: room });
