@@ -109,7 +109,7 @@
       <h3>🏆 조별 누적 점수판</h3>
       <div id="leaderboard" class="leaderboard"></div>
 
-      <!-- 컴퓨터 마스터 접속 시 불필요한 제어 영역(문제 선택, 시작 버튼 등)은 숨기고, 조별 힌트/정답 현황만 깔끔하게 보여주기 위해 래퍼 추가 -->
+      <!-- 컴퓨터 마스터 접속 시 불필요한 제어 영역(문제 선택, 시작 버튼 등)은 숨김 -->
       <div id="host-control-panel" style="margin: 20px 0; padding: 15px; background: #eef6ff; border-radius: 8px;">
         <label class="option-box">
           <input type="checkbox" id="enable-spy-opt" checked>
@@ -178,7 +178,7 @@
 
       <div id="spy-alert-box" class="spy-alert-box hidden" style="background:#8e44ad; color:white; padding:12px; border-radius:8px; font-weight:bold; margin:10px 0;">
         🕵️ 당신은 이번 라운드 스파이입니다!<br>
-        <span style="font-size:13px; font-weight:normal;">당신이 작성한 힌트는 <b>실제로 힌트를 입력한 조(당신이 속한 조)</b>의 출제자/참가자 화면에 반영되며, 정답 맞추기 화면에 제공됩니다[cite: 1].</span>
+        <span style="font-size:13px; font-weight:normal;">당신이 작성한 힌트는 <b>자신이 속한 조가 아닌 다른 조</b>로 전달되어 교란합니다[cite: 1].</span>
       </div>
 
       <h2 id="role-badge" style="margin: 15px 0;"></h2>
@@ -253,6 +253,20 @@
       socket.emit('createRoom', { teamsCount: count });
     }
 
+    // 조 변경 토글 버튼 UI 동기화 함수 추가
+    function updateToggleBtnUI() {
+      const btn = document.getElementById('toggle-switch-btn');
+      if (!btn || !gameState) return;
+      
+      if (gameState.allowSwitch) {
+        btn.innerText = "조 변경 허용: ON";
+        btn.classList.add('active');
+      } else {
+        btn.innerText = "조 변경 허용: OFF";
+        btn.classList.remove('active');
+      }
+    }
+
     socket.on('roomCreated', (data) => {
       currentRoomId = data.roomId;
       gameState = data.gameState;
@@ -263,6 +277,7 @@
       renderLeaderboard();
       renderHostGrid();
       renderMasterManagerList({});
+      updateToggleBtnUI();
     });
 
     socket.on('updateMasters', (masters) => {
@@ -304,24 +319,24 @@
       location.reload();
     });
 
-    // 👇 [핵심 수정] 컴퓨터 마스터 접속 시 제어판 영역을 숨기고 누적 점수판과 조별 힌트/정답 현황만 보여줌
     socket.on('masterAck', (data) => {
       gameState = data.gameState;
       document.getElementById('view-master-setup').classList.add('hidden');
       document.getElementById('view-host').classList.remove('hidden');
       document.getElementById('room-code-txt').innerText = `[컴퓨터 마스터 조회 모드] 방 코드: ${currentRoomId}[cite: 1]`;
       
-      // 컴퓨터 마스터는 문제 출제 및 시작 버튼 조작 불필요하므로 제어 패널 숨김
       document.getElementById('host-control-panel').classList.add('hidden');
       
       renderLeaderboard();
       renderHostGrid();
+      updateToggleBtnUI();
     });
 
     socket.on('syncState', (data) => {
       gameState = data.gameState;
       renderLeaderboard();
       renderHostGrid();
+      updateToggleBtnUI();
     });
 
     function selectQuestion(qKey) {
