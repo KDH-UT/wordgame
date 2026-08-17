@@ -613,6 +613,7 @@
         const members = gameState.teams[i] || [];
         const teamTotal = gameState.teamScores[i] || 0;
         let html = `<div class="team-card"><h4><span>${i}조 (${members.length}명)</span><small style="color:#2ECC71;">총 ${teamTotal}점</small></h4>`;
+        
         members.forEach(id => {
           const p = gameState.players[id];
           if (p) {
@@ -620,23 +621,41 @@
             const spyBadge = p.isSpy ? ` <span class="spy-badge">스파이🕵️</span>` : '';
             const spyClass = p.isSpy ? ' spy-highlight' : '';
             const timeTxt = p.hintDuration ? `<span class="time-badge">(${p.hintDuration}초)</span>` : '';
+            
             let hintTxt = '';
             if (p.hint) {
               const statusClass = p.isApproved ? 'hint-badge approved' : 'hint-badge';
               const statusLabel = p.isApproved ? '[승인됨]' : '[대기중]';
+              
               let actionBtns = '';
-              if (!p.isApproved) actionBtns = `<button class="btn-approve" onclick="approveHint('${id}')">승인</button>`;
-              actionBtns += `<button class="btn-danger" onclick="rejectHint('${id}')">반려</button>`;
+              // 💻 컴퓨터 마스터(isMaster)가 아닐 때만 승인/반려 버튼 생성
+              if (!isMaster) {
+                if (!p.isApproved) actionBtns = `<button class="btn-approve" onclick="approveHint('${id}')">승인</button>`;
+                actionBtns += `<button class="btn-danger" onclick="rejectHint('${id}')">반려</button>`;
+              }
+              
               hintTxt = `<br><span class="${statusClass}">${statusLabel} ${p.hint}</span> ${actionBtns}`;
             }
+            
             let ansTxt = '';
             if (p.answer) {
+              let ansActionBtns = '';
+              // 💻 컴퓨터 마스터(isMaster)가 아닐 때만 정답/오답 처리 버튼 생성
+              if (!isMaster) {
+                if (p.isCorrect) {
+                  ansActionBtns = ` <button class="btn-danger" onclick="rejectAnswer('${id}')">오답 처리</button>`;
+                } else {
+                  ansActionBtns = ` <button class="btn-approve" onclick="approveAnswer('${id}')">정답 처리</button> <button class="btn-danger" onclick="rejectAnswer('${id}')">오답 처리</button>`;
+                }
+              }
+
               if (p.isCorrect) {
-                ansTxt = `<br><small style="color:#27ae60; font-weight:bold;">정답 승인됨: ${p.answer} (+${p.pendingScore}점)</small> <button class="btn-danger" onclick="rejectAnswer('${id}')">오답 처리</button>`;
+                ansTxt = `<br><small style="color:#27ae60; font-weight:bold;">정답 승인됨: ${p.answer} (+${p.pendingScore}점)</small>${ansActionBtns}`;
               } else {
-                ansTxt = `<br><small style="color:#e67e22; font-weight:bold;">제출 정답: ${p.answer} (대기점수: ${p.pendingScore}점)</small> <button class="btn-approve" onclick="approveAnswer('${id}')">정답 처리</button> <button class="btn-danger" onclick="rejectAnswer('${id}')">오답 처리</button>`;
+                ansTxt = `<br><small style="color:#e67e22; font-weight:bold;">제출 정답: ${p.answer} (대기점수: ${p.pendingScore}점)</small>${ansActionBtns}`;
               }
             }
+            
             html += `<div class="player-item${spyClass}">• ${p.name}${timeTxt}${role}${spyBadge}${hintTxt}${ansTxt}</div>`;
           }
         });
