@@ -374,6 +374,11 @@
     socket.on('errorMsg', (msg) => { alert(msg); });
 
     socket.on('roomInfo', (data) => {
+      // 👇 조 변경을 요청한 경우인데, 허용 상태가 OFF(false)라면 차단
+      if (data.isChanging && !data.allowSwitch) {
+        return alert("현재 호스트가 조 변경을 허용하지 않았습니다!");
+      }
+    
       document.getElementById('player-step1').classList.add('hidden');
       document.getElementById('player-step2').classList.remove('hidden');
       document.getElementById('player-game').classList.add('hidden');
