@@ -177,7 +177,7 @@
 
       <div id="spy-alert-box" class="spy-alert-box hidden" style="background:#8e44ad; color:white; padding:12px; border-radius:8px; font-weight:bold; margin:10px 0;">
         🕵️ 당신은 이번 라운드 스파이입니다!<br>
-        <span style="font-size:13px; font-weight:normal;">당신이 작성한 힌트는 <b>실제로 힌트를 입력한 조(당신이 속한 조)</b>의 출제자/참가자 화면에 반영되며, 정답 맞추기 화면에 제공됩니다.</span>
+        <span style="font-size:13px; font-weight:normal;">당신이 작성한 힌트는 <b>실제로 힌트를 입력한 조(당신이 속한 조)</b>의 출제자/참가자 화면에 반영되며, 정답 맞추기 화면에 제공됩니다[cite: 1].</span>
       </div>
 
       <h2 id="role-badge" style="margin: 15px 0;"></h2>
@@ -192,11 +192,10 @@
       </div>
 
       <div id="ui-guesser" class="hidden">
-        <p style="color: #d9534f; font-weight: bold;">당신은 문제를 맞추는 사람입니다!</p>
         <div id="live-score-box" class="live-score-box hidden">
           현재 제출 시 획득 점수: <br><span id="live-score-val">1000</span> 점
         </div>
-        <p style="margin-top: 10px;">우리 조에 도착한 힌트 목록 (스파이 힌트 포함):</p>
+        <p style="margin-top: 10px;">우리 조에 도착한 힌트 목록:</p>
         <div id="hints-list" style="background: #f8f9fa; padding: 10px; border-radius: 8px; margin: 10px 0; min-height: 50px;"></div>
         <input type="text" id="answer-input" placeholder="정답 입력"><br>
         <button id="ans-btn" onclick="sendAnswer()" style="background-color: #e67e22;" disabled>정답 제출</button>
@@ -393,39 +392,27 @@
       document.getElementById('role-badge').innerText = "호스트가 라운드를 시작하길 기다리는 중...";
     });
 
-    // 참가자 화면의 라운드 시작 이벤트 처리 부분 수정
+    // 👇 라운드 시작 시 화면 완전 초기화 및 힌트/정답 UI 숨김
     socket.on('roundStart', (data) => {
       isTimerStarted = false;
       stopLiveScoreTimer();
-      
-      // 1. 기존 화면 요소들을 모두 숨기고 초기화
       document.getElementById('ui-giver').classList.add('hidden');
-      document.getElementById('ui-guesser').classList.add('hidden');
+      document.getElementById('ui-guesser').classList.add('hidden'); // 정답/힌트 입력 영역 숨김
       document.getElementById('live-score-box').classList.add('hidden');
-      
-      // 2. 입력창 및 결과 메시지 초기화
       document.getElementById('hint-input').value = '';
       document.getElementById('answer-input').value = '';
       document.getElementById('hint-msg').innerText = '';
       document.getElementById('result-score-txt').innerText = '';
-      
-      // 3. 힌트 목록 초기화 (이 부분이 중요합니다)
-      document.getElementById('hints-list').innerHTML = '';
-      
-      // 4. 버튼 상태 초기화
+      document.getElementById('hints-list').innerHTML = ''; // 이전 힌트 삭제
       document.getElementById('hint-btn').disabled = false;
       document.getElementById('ans-btn').disabled = true;
-    
-      // 스파이 여부 표시
+
       if (data.isSpy) document.getElementById('spy-alert-box').classList.remove('hidden');
       else document.getElementById('spy-alert-box').classList.add('hidden');
-    
-      // 새로운 라운드 UI 표시
+
       if (data.isGuesser) {
         document.getElementById('role-badge').innerText = "🎯 당신은 문제를 맞추는 사람입니다!";
-        document.getElementById('ui-guesser').classList.remove('hidden');
-        // 처음 시작할 때는 빈 상태로 둠
-        document.getElementById('hints-list').innerHTML = '<i>힌트가 공개되기를 기다리는 중...</i>';
+        // 두 번째 버튼을 누르기 전까지는 ui-guesser를 숨겨둠
       } else {
         document.getElementById('role-badge').innerText = "💡 힌트를 작성해 주세요!";
         document.getElementById('given-word').innerText = data.word;
@@ -436,13 +423,18 @@
       }
     });
 
-    // 👇 각 조별로 수신된 힌트 목록(스파이 교란 반영)을 출력하도록 수정
+    // 👇 두 번째 버튼을 눌렀을 때만 조별 힌트 및 정답 영역 공개
     socket.on('hintsRevealed', (data) => {
       isTimerStarted = true;
       timerStartTime = data.startTime || Date.now();
+      
+      // 구해서(정답자) 화면 및 필요한 항목들만 노출
+      document.getElementById('ui-guesser').classList.remove('hidden');
+      
       const list = document.getElementById('hints-list');
       const myTeamHints = data.teamHints || [];
-      list.innerHTML = myTeamHints.map(h => `<div style="padding: 4px 8px; margin: 3px 0; background: #fff; border: 1px solid #ddd; border-radius: 4px; font-weight:bold; color:#2980b9;">• ${h}</div>`).join('') || '<i>우리 조에 제출된 승인된 힌트가 없습니다.</i>';
+      list.innerHTML = myTeamHints.map(h => `<div style="padding: 6px; margin: 5px 0; background: #fff; border: 1px solid #ddd; border-radius: 6px; font-weight:bold; color:#2980b9;">• ${h}</div>`).join('') || '<i>제출된 힌트가 없습니다.</i>';
+      
       document.getElementById('ans-btn').disabled = false;
       startLiveScoreTimer();
     });
