@@ -121,6 +121,12 @@
           <input type="checkbox" id="enable-spy-opt" checked>
           <span>🕵️ 이번 라운드 스파이 포함 (타 조 교란)[cite: 1]</span>
         </label>
+
+        <!-- 💡 호스트가 설정할 수 있는 힌트 개수 입력 필드 추가 -->
+        <div style="margin: 10px 0; display: flex; align-items: center; justify-content: center; gap: 10px;">
+          <label style="font-weight: bold; color: #2c3e50;" for="max-hints-opt">보여줄 최대 힌트 수:</label>
+          <input type="number" id="max-hints-opt" value="5" min="1" max="20" style="width: 80px; margin: 0; text-align: center;">
+        </div>
         
         <p style="margin-bottom: 8px; font-weight: bold; color: #2c3e50;">출제할 문제 또는 예제를 선택하세요[cite: 1]</p>
         <div class="question-grid">
@@ -139,7 +145,7 @@
         <button class="btn-action" onclick="startRound()">1. 라운드 시작 (역할 자동배정)[cite: 1]</button>
         <button class="btn-action" style="background-color: #27ae60;" onclick="revealHintsToGuessers()">2. 조별 힌트 및 정답 현황 공개 (타이머 시작!)[cite: 1]</button>
         
-        <!-- 👈 진짜 호스트 화면에 추가된 컴퓨터 마스터 화면 공개 전용 버튼 -->
+        <!-- 진짜 호스트 화면에 추가된 컴퓨터 마스터 화면 공개 전용 버튼 -->
         <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #bce8f1;">
           <button class="btn-action" style="background-color: #8e44ad;" onclick="revealMasterHints()">💻 컴퓨터 마스터 화면에 힌트/정답 공개하기</button>
         </div>
@@ -374,8 +380,9 @@
     function startRound() {
       if (!selectedQuestionKey) return alert("문제를 먼저 선택하세요!");
       const isSpyEnabled = document.getElementById('enable-spy-opt').checked;
+      const maxHints = parseInt(document.getElementById('max-hints-opt').value) || 5;
       const qData = questionsDatabase[selectedQuestionKey];
-      socket.emit('startRound', { roomId: currentRoomId, qKey: selectedQuestionKey, isSpyEnabled, qData });
+      socket.emit('startRound', { roomId: currentRoomId, qKey: selectedQuestionKey, isSpyEnabled, maxHints, qData });
     }
 
     function revealHintsToGuessers() {
@@ -383,7 +390,6 @@
       alert("각 조별로 힌트와 정답 입력 화면이 공개되고 타이머가 시작되었습니다![cite: 1]");
     }
 
-    // 👈 진짜 호스트가 컴퓨터 마스터 화면 공개 버튼을 눌렀을 때 실행
     function revealMasterHints() {
       socket.emit('revealMasterHints', { roomId: currentRoomId });
       alert("컴퓨터 마스터 화면에 힌트 및 정답 현황이 공개되었습니다 (스파이 이동 완료).");
@@ -634,7 +640,6 @@
         const teamTotal = gameState.teamScores[i] || 0;
         let html = `<div class="team-card"><h4><span>${i}조 (${members.length}명)</span><small style="color:#2ECC71;">총 ${teamTotal}점</small></h4>`;
         
-        // 👈 컴퓨터 마스터 화면이고, 진짜 호스트가 아직 마스터 공개 버튼을 누르지 않았다면 숨김
         const hideDetailsForMaster = isMaster && !gameState.isMasterHintsRevealed;
 
         if (hideDetailsForMaster) {
