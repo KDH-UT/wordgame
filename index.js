@@ -202,6 +202,7 @@ io.on('connection', (socket) => {
             let spyHints = [];
             let teamHints = [];
 
+            // 1. 해당 조를 타깃으로 하는 모든 스파이의 힌트 수집 (무조건 포함 대상)
             Object.keys(room.players).forEach(id => {
                 const p = room.players[id];
                 if (p.isSpy && Number(p.targetTeamForSpy) === Number(targetTeam) && p.hint && p.isApproved) {
@@ -209,6 +210,7 @@ io.on('connection', (socket) => {
                 }
             });
 
+            // 2. 해당 조의 일반 팀원(스파이/출제자 제외) 승인된 힌트 수집
             members.forEach(id => {
                 const p = room.players[id];
                 if (!p.isGuesser && !p.isSpy && p.hint && p.isApproved) {
@@ -216,11 +218,17 @@ io.on('connection', (socket) => {
                 }
             });
 
-            let finalHintsList = [...spyHints, ...teamHints];
-            if (finalHintsList.length > room.maxHints) {
-                finalHintsList.sort(() => Math.random() - 0.5);
-                finalHintsList = finalHintsList.slice(0, room.maxHints);
-            }
+            // 3. 일반 힌트 랜덤 섞기
+            teamHints.sort(() => Math.random() - 0.5);
+
+            // 4. 스파이 힌트 개수를 제외하고 남은 자리를 일반 힌트로 채움
+            const neededNormalCount = Math.max(0, room.maxHints - spyHints.length);
+            const selectedNormalHints = teamHints.slice(0, neededNormalCount);
+
+            // 5. 스파이 힌트(무조건) + 일반 힌트 합치기
+            let finalHintsList = [...spyHints, ...selectedNormalHints];
+
+            // 6. 스파이 힌트가 어디 있는지 모르게 전체를 최종적으로 한 번 더 섞음
             finalHintsList.sort(() => Math.random() - 0.5);
 
             io.to(guesserId).emit('hintsRevealed', { hints: finalHintsList, startTime: now });
