@@ -195,6 +195,7 @@
       <div id="player-leaderboard" class="leaderboard"></div>
 
 
+    <!-- 스파이 알림 박스 위치 -->
     <div id="spy-alert-box" class="spy-alert-box hidden" style="background:#8e44ad; color:white; padding:12px; border-radius:8px; font-weight:bold; margin:10px 0;">
         🕵️ 당신은 이번 라운드 스파이입니다!<br>
         <span style="font-size:13px; font-weight:normal;">당신의 힌트는 <b><span id="spy-target-team"></span>조</b>로 전달됩니다.</span>
@@ -455,13 +456,21 @@
       document.getElementById('hint-btn').disabled = false;
       document.getElementById('ans-btn').disabled = true;
 
-      if (data.isSpy) document.getElementById('spy-alert-box').classList.remove('hidden');
-      else document.getElementById('spy-alert-box').classList.add('hidden');
+      // 🕵️ 스파이 여부 및 타깃 조 표시 로직 (업데이트 완료)
+      if (data.isSpy) {
+        document.getElementById('spy-alert-box').classList.remove('hidden');
+        const targetTeamSpan = document.getElementById('spy-target-team');
+        if (targetTeamSpan) {
+          targetTeamSpan.innerText = data.targetTeamForSpy || "알 수 없는";
+        }
+      } else {
+        document.getElementById('spy-alert-box').classList.add('hidden');
+      }
 
       if (data.isGuesser) {
-        document.getElementById('role-badge').innerText = "🎯 당신은 문제를 맞추는 사람입니다![cite: 1]";
+        document.getElementById('role-badge').innerText = "🎯 당신은 문제를 맞추는 사람입니다!";
       } else {
-        document.getElementById('role-badge').innerText = "💡 힌트를 작성해 주세요![cite: 1]";
+        document.getElementById('role-badge').innerText = "💡 힌트를 작성해 주세요!";
         document.getElementById('given-word').innerText = data.word;
         const imgContainer = document.getElementById('given-image-container');
         if (data.image) imgContainer.innerHTML = `<img src="${data.image}" alt="문제 이미지" class="hint-image">`;
