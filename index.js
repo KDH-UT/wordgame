@@ -23,9 +23,10 @@ io.on('connection', (socket) => {
             startTime: null,
             currentWord: '',
             currentImage: '',
+            maxHints: 5, // 💡 호스트가 설정한 최대 힌트 수 저장 변수 추가
             allowTeamSwitch: false,
             isHintsRevealed: false,
-            isMasterHintsRevealed: false, // 👈 컴퓨터 마스터 전용 공개 여부 상태 추가
+            isMasterHintsRevealed: false,
             hostSocketId: socket.id,
             masters: {}
         };
@@ -91,7 +92,8 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('syncState', { gameState: room });
     });
 
-    socket.on('startRound', ({ roomId, qKey, isSpyEnabled, qData }) => {
+    // 💡 라운드 시작 시 호스트가 설정한 maxHints를 받아서 저장하도록 수정
+    socket.on('startRound', ({ roomId, qKey, isSpyEnabled, maxHints, qData }) => {
         const room = rooms[roomId];
         if (!room) return;
         room.currentWord = qData.word;
@@ -99,7 +101,8 @@ io.on('connection', (socket) => {
         room.roundStartTime = Date.now();
         room.startTime = null;
         room.isHintsRevealed = false;
-        room.isMasterHintsRevealed = false; // 👈 라운드 시작 시 컴퓨터 마스터 공개 상태도 초기화
+        room.isMasterHintsRevealed = false;
+        room.maxHints = maxHints || 5;
 
         for (let t = 1; t <= room.teamsCount; t++) {
             const members = room.teams[t];
@@ -179,6 +182,7 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('syncState', { gameState: room });
     });
 
+    // 💡 힌트 공개 시 스파이 힌트는 무조건 포함하고, 나머지는 랜덤 추출하여 제한하는 로직
     socket.on('revealHints', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -196,38 +200,55 @@ io.on('connection', (socket) => {
             const guesserId = members.find(id => room.players[id].isGuesser);
             if (!guesserId) continue;
 
-            const hintsList = [];
-            members.forEach(id => {
-                const p = room.players[id];
-                if (!p.isGuesser && !p.isSpy && p.hint && p.isApproved) hintsList.push(p.hint);
-            });
+            let spyHints = [];
+            let normalHints = [];
+
+            // 1. 해당 조로 들어온 스파이 힌트 수집 (무조건 포함 대상)
             Object.keys(room.players).forEach(id => {
                 const p = room.players[id];
-                if (p.isSpy && Number(p.targetTeamForSpy) === Number(targetTeam) && p.hint && p.isApproved) hintsList.push(p.hint);
+                if (p.isSpy && Number(p.targetTeamForSpy) === Number(targetTeam) && p.hint && p.isApproved) {
+                    spyHints.push(p.hint);
+                }
             });
 
-            hintsList.sort(() => Math.random() - 0.5);
-            io.to(guesserId).emit('hintsRevealed', { hints: hintsList, startTime: now });
+            // 2. 해당 조의 일반 팀원(출제자 제외) 승인된 힌트 수집
+            members.forEach(id => {
+                const p = room.players[id];
+                if (!p.isGuesser && !p.isSpy && p.hint && p.isApproved) {
+                    normalHints.push(p.hint);
+                }
+            });
+
+            // 일반 힌트 섞기 (랜덤성 부여)
+            normalHints.sort(() => Math.random() - 0.5);
+
+            // 3. 호스트가 지정한 최대 힌트 개수(room.maxHints) 맞추기
+            // 스파이 힌트를 무조건 넣고, 남은 자리를 일반 힌트 중에서 앞에서부터 채움
+            const neededNormalCount = Math.max(0, room.maxHints - spyHints.length);
+            const selectedNormalHints = normalHints.slice(0, neededNormalCount);
+
+            let finalHintsList = [...spyHints, ...selectedNormalHints];
+
+            // 최종 보여주기 전 한 번 더 섞어주어 스파이 힌트가 어디에 위치할지 모르게 함
+            finalHintsList.sort(() => Math.random() - 0.5);
+
+            io.to(guesserId).emit('hintsRevealed', { hints: finalHintsList, startTime: now });
         }
         io.to(roomId).emit('syncState', { gameState: room });
     });
 
-    // 👈 진짜 호스트가 누를 때 컴퓨터 마스터 화면에 정보 공개 및 스파이 시각적 조 이동 처리
     socket.on('revealMasterHints', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
         room.isMasterHintsRevealed = true;
 
-        // 스파이들을 실제로 타겟 조로 임시 이동시켜서 컴퓨터 마스터 화면에 반영
         Object.keys(room.players).forEach(id => {
             const p = room.players[id];
             if (p && p.isSpy && p.targetTeamForSpy) {
-                // 원래 조 배열에서 제거
                 for (let i = 1; i <= room.teamsCount; i++) {
                     const idx = room.teams[i].indexOf(id);
                     if (idx !== -1) room.teams[i].splice(idx, 1);
                 }
-                // 타겟 조 배열에 추가
                 p.team = Number(p.targetTeamForSpy);
                 if (!room.teams[p.team]) room.teams[p.team] = [];
                 room.teams[p.team].push(id);
@@ -261,7 +282,7 @@ io.on('connection', (socket) => {
         room.teamHistories[player.team].push({
             id: 'HIST-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
             playerId: player.id, playerName: player.name, team: player.team,
-            targetWord: room.currentWord, submittedAnswer: answer, score: score, isCorrect: isMatched, timestamp: new Date().toLocaleTimeString()
+            targetWord: room.currentWord, submittedAddress: answer, score: score, isCorrect: isMatched, timestamp: new Date().toLocaleTimeString()
         });
 
         io.to(roomId).emit('syncState', { gameState: room });
@@ -283,8 +304,6 @@ io.on('connection', (socket) => {
         }
 
         io.to(playerId).emit('answerApproved', { score: gainedScore });
-        io.to(roomId).emit('leaderboardUpdate', { teamsCount: room.teamsCount, teamScores: room.teamScores });
-        io.to(roomId).emit('syncState', { gameState: room });
     });
 
     socket.on('rejectAnswer', ({ roomId, playerId }) => {
