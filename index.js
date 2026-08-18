@@ -23,7 +23,7 @@ io.on('connection', (socket) => {
             startTime: null,
             currentWord: '',
             currentImage: '',
-            maxHints: 5, // 💡 호스트가 설정한 최대 힌트 수 저장 변수 추가
+            maxHints: 5,
             allowTeamSwitch: false,
             isHintsRevealed: false,
             isMasterHintsRevealed: false,
@@ -92,7 +92,6 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('syncState', { gameState: room });
     });
 
-    // 💡 라운드 시작 시 호스트가 설정한 maxHints를 받아서 저장하도록 수정
     socket.on('startRound', ({ roomId, qKey, isSpyEnabled, maxHints, qData }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -142,7 +141,8 @@ io.on('connection', (socket) => {
                     word: isGuesser ? '???' : qData.word,
                     image: isGuesser ? null : qData.image,
                     isGuesser,
-                    isSpy
+                    isSpy,
+                    targetTeamForSpy: spyTarget
                 });
             });
         }
@@ -182,7 +182,6 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('syncState', { gameState: room });
     });
 
-    // 💡 힌트 공개 시 스파이 힌트는 무조건 포함하고, 나머지는 랜덤 추출하여 제한하는 로직
     socket.on('revealHints', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -201,9 +200,8 @@ io.on('connection', (socket) => {
             if (!guesserId) continue;
 
             let spyHints = [];
-            let normalHints = [];
+            let teamHints = [];
 
-            // 1. 해당 조로 들어온 스파이 힌트 수집 (무조건 포함 대상)
             Object.keys(room.players).forEach(id => {
                 const p = room.players[id];
                 if (p.isSpy && Number(p.targetTeamForSpy) === Number(targetTeam) && p.hint && p.isApproved) {
@@ -211,25 +209,18 @@ io.on('connection', (socket) => {
                 }
             });
 
-            // 2. 해당 조의 일반 팀원(출제자 제외) 승인된 힌트 수집
             members.forEach(id => {
                 const p = room.players[id];
                 if (!p.isGuesser && !p.isSpy && p.hint && p.isApproved) {
-                    normalHints.push(p.hint);
+                    teamHints.push(p.hint);
                 }
             });
 
-            // 일반 힌트 섞기 (랜덤성 부여)
-            normalHints.sort(() => Math.random() - 0.5);
-
-            // 3. 호스트가 지정한 최대 힌트 개수(room.maxHints) 맞추기
-            // 스파이 힌트를 무조건 넣고, 남은 자리를 일반 힌트 중에서 앞에서부터 채움
-            const neededNormalCount = Math.max(0, room.maxHints - spyHints.length);
-            const selectedNormalHints = normalHints.slice(0, neededNormalCount);
-
-            let finalHintsList = [...spyHints, ...selectedNormalHints];
-
-            // 최종 보여주기 전 한 번 더 섞어주어 스파이 힌트가 어디에 위치할지 모르게 함
+            let finalHintsList = [...spyHints, ...teamHints];
+            if (finalHintsList.length > room.maxHints) {
+                finalHintsList.sort(() => Math.random() - 0.5);
+                finalHintsList = finalHintsList.slice(0, room.maxHints);
+            }
             finalHintsList.sort(() => Math.random() - 0.5);
 
             io.to(guesserId).emit('hintsRevealed', { hints: finalHintsList, startTime: now });
@@ -241,7 +232,6 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return;
         room.isMasterHintsRevealed = true;
-
         Object.keys(room.players).forEach(id => {
             const p = room.players[id];
             if (p && p.isSpy && p.targetTeamForSpy) {
@@ -254,7 +244,6 @@ io.on('connection', (socket) => {
                 room.teams[p.team].push(id);
             }
         });
-
         io.to(roomId).emit('syncState', { gameState: room });
     });
 
@@ -263,13 +252,9 @@ io.on('connection', (socket) => {
         if (!room || !room.startTime) return;
         const player = room.players[socket.id];
         if (!player) return;
-
         player.answer = answer;
         player.pendingScore = score;
-        const cleanSubmitted = answer.replace(/\s+/g, '').toLowerCase();
-        const cleanTarget = room.currentWord.replace(/\s+/g, '').toLowerCase();
-        const isMatched = (cleanTarget && cleanSubmitted === cleanTarget);
-
+        const isMatched = (answer.replace(/\s+/g, '').toLowerCase() === room.currentWord.replace(/\s+/g, '').toLowerCase());
         if (isMatched) {
             player.isCorrect = true;
             room.teamScores[player.team] += score;
@@ -278,13 +263,10 @@ io.on('connection', (socket) => {
         } else {
             socket.emit('answerPending');
         }
-
         room.teamHistories[player.team].push({
-            id: 'HIST-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
-            playerId: player.id, playerName: player.name, team: player.team,
-            targetWord: room.currentWord, submittedAddress: answer, score: score, isCorrect: isMatched, timestamp: new Date().toLocaleTimeString()
+            id: 'HIST-' + Date.now(), playerId: player.id, playerName: player.name, 
+            team: player.team, targetWord: room.currentWord, submittedAnswer: answer, score: score, isCorrect: isMatched, timestamp: new Date().toLocaleTimeString()
         });
-
         io.to(roomId).emit('syncState', { gameState: room });
     });
 
@@ -294,16 +276,11 @@ io.on('connection', (socket) => {
         const player = room.players[playerId];
         if (!player || player.isCorrect) return;
         player.isCorrect = true;
-        const gainedScore = player.pendingScore || 0;
-        room.teamScores[player.team] += gainedScore;
-
-        const teamHist = room.teamHistories[player.team];
-        if (teamHist) {
-            const entry = teamHist.slice().reverse().find(h => h.playerId === playerId && h.submittedAnswer === player.answer);
-            if (entry) entry.isCorrect = true;
-        }
-
-        io.to(playerId).emit('answerApproved', { score: gainedScore });
+        room.teamScores[player.team] += player.pendingScore;
+        const entry = room.teamHistories[player.team].find(h => h.playerId === playerId && h.submittedAnswer === player.answer);
+        if (entry) entry.isCorrect = true;
+        io.to(playerId).emit('answerApproved', { score: player.pendingScore });
+        io.to(roomId).emit('leaderboardUpdate', { teamsCount: room.teamsCount, teamScores: room.teamScores });
     });
 
     socket.on('rejectAnswer', ({ roomId, playerId }) => {
@@ -311,18 +288,10 @@ io.on('connection', (socket) => {
         if (!room) return;
         const player = room.players[playerId];
         if (!player) return;
-        if (player.isCorrect) {
-            const deductedScore = player.pendingScore || 0;
-            room.teamScores[player.team] = Math.max(0, room.teamScores[player.team] - deductedScore);
-        }
+        if (player.isCorrect) room.teamScores[player.team] = Math.max(0, room.teamScores[player.team] - player.pendingScore);
         player.isCorrect = false;
-
-        const teamHist = room.teamHistories[player.team];
-        if (teamHist) {
-            const entry = teamHist.slice().reverse().find(h => h.playerId === playerId && h.submittedAnswer === player.answer);
-            if (entry) entry.isCorrect = false;
-        }
-
+        const entry = room.teamHistories[player.team].find(h => h.playerId === playerId && h.submittedAnswer === player.answer);
+        if (entry) entry.isCorrect = false;
         io.to(playerId).emit('answerRejected');
         io.to(roomId).emit('leaderboardUpdate', { teamsCount: room.teamsCount, teamScores: room.teamScores });
         io.to(roomId).emit('syncState', { gameState: room });
@@ -333,15 +302,12 @@ io.on('connection', (socket) => {
         if (!room) return;
         const entry = room.teamHistories[teamNum].find(h => h.id === historyId);
         if (!entry) return;
-
         if (entry.isCorrect) {
             entry.isCorrect = false;
             room.teamScores[teamNum] = Math.max(0, room.teamScores[teamNum] - entry.score);
-            io.to(entry.playerId).emit('answerRejected');
         } else {
             entry.isCorrect = true;
             room.teamScores[teamNum] += entry.score;
-            io.to(entry.playerId).emit('answerApproved', { score: entry.score });
         }
         io.to(roomId).emit('leaderboardUpdate', { teamsCount: room.teamsCount, teamScores: room.teamScores });
         io.to(roomId).emit('syncState', { gameState: room });
@@ -350,21 +316,13 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
-            if (room.masters[socket.id]) {
-                delete room.masters[socket.id];
-                io.to(room.hostSocketId).emit('updateMasters', room.masters);
-            }
+            if (room.masters[socket.id]) { delete room.masters[socket.id]; io.to(room.hostSocketId).emit('updateMasters', room.masters); }
             for (let i = 1; i <= room.teamsCount; i++) {
                 const idx = room.teams[i].indexOf(socket.id);
-                if (idx !== -1) {
-                    room.teams[i].splice(idx, 1);
-                    delete room.players[socket.id];
-                    io.to(roomId).emit('syncState', { gameState: room });
-                }
+                if (idx !== -1) { room.teams[i].splice(idx, 1); delete room.players[socket.id]; io.to(roomId).emit('syncState', { gameState: room }); }
             }
         }
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(3000, () => console.log('Server running on port 3000'));
